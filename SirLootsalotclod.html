@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SirLootsalot - Space Mining Adventure</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+        }
+        #timer {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 20px;
+            pointer-events: none;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+        }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .upgrade {
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h2>SirLootsalot</h2>
+        <p>Nutrinium: <span id="nutrinium">0</span> units</p>
+        <p>Credits: <span id="credits">100</span></p>
+        <p>Nutrinium Value: <span id="value">10</span> credits/unit</p>
+        <p>Health: <span id="health">1</span></p>
+        <p>Speed: <span id="speed">1</span></p>
+        <p>Gun Level: <span id="gun">1</span></p>
+        <p>Respawn Cost: <span id="respawn">50</span> credits</p>
+    </div>
+
+    <div id="timer">Time: <span id="time">5:00</span></div>
+
+    <div id="controls">
+        <p>WASD: Move | Mouse: Direction | Click: Shoot</p>
+        <p>Z: Sell Nutrinium | X: Upgrade Speed (100) | C: Upgrade Guns (150) | V: Upgrade Health (200)</p>
+        <p>R: Restart Game | Q: Quit Game</p>
+    </div>
+
+    <div id="gameOver">
+        <h1>Game Over!</h1>
+        <p>Total Credits: <span id="finalCredits">0</span></p>
+        <p>Time Survived: <span id="timeSurvived">0:00</span></p>
+        <button id="restartButton">Play Again</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables
+        let scene, camera, renderer, clock;
+        let player, playerDirection, playerVelocity, playerSpeed;
+        let projectiles = [], enemies = [], deposits = [], enemyProjectiles = [];
+        let starField = [];
+        let nutrinium = 0, credits = 100, nutriValue = 10;
+        let health = 1, speedLevel = 1, gunLevel = 1;
+        let respawnCost = 50;
+        let gameTime = 300; // 5 minutes in seconds
+        let isGameOver = false;
+        let lastShot = 0, shootingDelay = 0.5;
+        let mousePosition = new THREE.Vector2();
+        let raycaster = new THREE.Raycaster();
+        let moveUp = false, moveDown = false, moveLeft = false, moveRight = false;
+        let keyStates = {};
+
+        // Initialize the game
+        function init() {
+            // Set up clock for timing
+            clock = new THREE.Clock();
+            
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000011);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 10, -15);
+            camera.lookAt(0, 0, 0);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+            
+            // Create lights
+            const ambientLight = new THREE.AmbientLight(0x333333);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            
+            // Create star field
+            createStarField();
+            
+            // Create player
+            createPlayer();
+            
+            // Create initial deposits
+            for (let i = 0; i < 10; i++) {
+                createDeposit();
+            }
+            
+            // Set up event listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mousedown', onMouseDown);
+            document.getElementById('restartButton').addEventListener('click', restartGame);
+            
+            // Set game state
+            isGameOver = false;
+            
+            // Start animation loop
+            animate();
+        }
+        
+        function createStarField() {
+            // Create a starfield in the background
+            const starGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+            const starMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            
+            for (let i = 0; i < 1000; i++) {
+                const star = new THREE.Mesh(starGeometry, starMaterial);
+                star.position.x = Math.random() * 2000 - 1000;
+                star.position.y = Math.random() * 2000 - 1000;
+                star.position.z = Math.random() * 2000 - 1000;
+                scene.add(star);
+                starField.push(star);
+            }
+        }
+        
+        function createPlayer() {
+            // Create player ship
+            const geometry = new THREE.ConeGeometry(1, 4, 8);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0x3366ff,
+                emissive: 0x112244,
+                shininess: 100
+            });
+            
+            player = new THREE.Mesh(geometry, material);
+            player.rotation.x = Math.PI / 2;
+            player.position.set(0, 0, 0);
+            player.castShadow = true;
+            player.receiveShadow = true;
+            scene.add(player);
+            
+            // Initialize player movement
+            playerDirection = new THREE.Vector3(0, 0, 1);
+            playerVelocity = new THREE.Vector3();
+            playerSpeed = 20;
+            
+            // Create camera rig to follow player
+            camera.position.set(0, 10, -15);
+            player.add(camera);
+            camera.position.set(0, 5, -15);
+            camera.lookAt(player.position);
+        }
+        
+        function createDeposit(isLarge = false) {
+            // Random position away from player
+            const distance = isLarge ? 50 + Math.random() * 50 : 30 + Math.random() * 70;
+            const angle = Math.random() * Math.PI * 2;
+            
+            const posX = player.position.x + Math.cos(angle) * distance;
+            const posY = player.position.y + (Math.random() - 0.5) * 20;
+            const posZ = player.position.z + Math.sin(angle) * distance;
+            
+            // Create meteor with gems
+            const meteorGeometry = new THREE.SphereGeometry(isLarge ? 3 : 1.5, 8, 8);
+            const meteorMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x8B4513,
+                emissive: 0x220000,
+                shininess: 10,
+                flatShading: true
+            });
+            
+            const meteor = new THREE.Mesh(meteorGeometry, meteorMaterial);
+            meteor.position.set(posX, posY, posZ);
+            
+            // Add gems (nutrinium)
+            const gemGeometry = new THREE.OctahedronGeometry(isLarge ? 0.8 : 0.4, 0);
+            const gemMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x00FFAA, 
+                emissive: 0x006633,
+                shininess: 100
+            });
+            
+            const numGems = isLarge ? 5 : Math.floor(Math.random() * 3) + 1;
+            const gems = [];
+            
+            for (let i = 0; i < numGems; i++) {
+                const gem = new THREE.Mesh(gemGeometry, gemMaterial);
+                const gemDistance = isLarge ? 2 : 0.8;
+                gem.position.set(
+                    (Math.random() - 0.5) * gemDistance,
+                    (Math.random() - 0.5) * gemDistance + gemDistance/2,
+                    (Math.random() - 0.5) * gemDistance
+                );
+                meteor.add(gem);
+                gems.push(gem);
+            }
+            
+            scene.add(meteor);
+            
+            const deposit = {
+                mesh: meteor,
+                gems: gems,
+                value: isLarge ? 20 + Math.floor(Math.random() * 30) : 2 + Math.floor(Math.random() * 8),
+                isLarge: isLarge
+            };
+            
+            deposits.push(deposit);
+            
+            // If it's a large deposit, create a guardian pirate
+            if (isLarge) {
+                createEnemy(posX, posY, posZ, true);
+            }
+            
+            return deposit;
+        }
+        
+        function createEnemy(x = null, y = null, z = null, isGuardian = false) {
+            // If no position provided, create at random position
+            if (x === null) {
+                const distance = 40 + Math.random() * 30;
+                const angle = Math.random() * Math.PI * 2;
+                
+                x = player.position.x + Math.cos(angle) * distance;
+                y = player.position.y + (Math.random() - 0.5) * 20;
+                z = player.position.z + Math.sin(angle) * distance;
+            }
+            
+            // Create enemy ship
+            const geometry = isGuardian ? 
+                new THREE.DodecahedronGeometry(2, 0) : 
+                new THREE.TetrahedronGeometry(1.5, 0);
+            
+            const material = new THREE.MeshPhongMaterial({ 
+                color: isGuardian ? 0xFF3300 : 0xFF0000,
+                emissive: isGuardian ? 0x331100 : 0x330000,
+                shininess: 50
+            });
+            
+            const enemyShip = new THREE.Mesh(geometry, material);
+            enemyShip.position.set(x, y, z);
+            scene.add(enemyShip);
+            
+            const enemy = {
+                mesh: enemyShip,
+                speed: isGuardian ? 10 : 15,
+                lastShot: 0,
+                shootingDelay: isGuardian ? 1 : 2,
+                isGuardian: isGuardian,
+                value: isGuardian ? 15 : 5,
+                guardPosition: isGuardian ? new THREE.Vector3(x, y, z) : null,
+                guardRadius: isGuardian ? 15 : 0
+            };
+            
+            enemies.push(enemy);
+            return enemy;
+        }
+        
+        function shootProjectile(origin, direction, isEnemy = false) {
+            const geometry = new THREE.SphereGeometry(0.3, 8, 8);
+            const material = new THREE.MeshBasicMaterial({ 
+                color: isEnemy ? 0xFF3300 : 0x00AAFF,
+                emissive: isEnemy ? 0x331100 : 0x003366
+            });
+            
+            const projectile = new THREE.Mesh(geometry, material);
+            projectile.position.copy(origin);
+            
+            // Move projectile forward from origin
+            const offset = direction.clone().normalize().multiplyScalar(isEnemy ? 2 : 2);
+            projectile.position.add(offset);
+            
+            scene.add(projectile);
+            
+            const newProjectile = {
+                mesh: projectile,
+                direction: direction.clone().normalize(),
+                speed: isEnemy ? 40 : 50,
+                isEnemy: isEnemy
+            };
+            
+            if (isEnemy) {
+                enemyProjectiles.push(newProjectile);
+            } else {
+                projectiles.push(newProjectile);
+            }
+        }
+        
+        // Handle window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Handle mouse movement to control direction
+        function onMouseMove(event) {
+            mousePosition.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mousePosition.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+        
+        // Handle mouse click to shoot
+        function onMouseDown(event) {
+            if (event.button === 0 && !isGameOver) { // Left mouse button
+                const now = clock.getElapsedTime();
+                if (now - lastShot >= shootingDelay) {
+                    shootProjectile(player.position, playerDirection);
+                    lastShot = now;
+                }
+            }
+        }
+        
+        // Handle key down
+        function onKeyDown(event) {
+            keyStates[event.code] = true;
+            
+            switch (event.code) {
+                case 'KeyW':
+                    moveUp = true;
+                    break;
+                case 'KeyS':
+                    moveDown = true;
+                    break;
+                case 'KeyA':
+                    moveLeft = true;
+                    break;
+                case 'KeyD':
+                    moveRight = true;
+                    break;
+                case 'KeyZ':
+                    sellNutrinium();
+                    break;
+                case 'KeyX':
+                    upgradeSpeed();
+                    break;
+                case 'KeyC':
+                    upgradeGun();
+                    break;
+                case 'KeyV':
+                    upgradeHealth();
+                    break;
+                case 'KeyR':
+                    restartGame();
+                    break;
+                case 'KeyQ':
+                    quitGame();
+                    break;
+            }
+        }
+        
+        // Handle key up
+        function onKeyUp(event) {
+            keyStates[event.code] = false;
+            
+            switch (event.code) {
+                case 'KeyW':
+                    moveUp = false;
+                    break;
+                case 'KeyS':
+                    moveDown = false;
+                    break;
+                case 'KeyA':
+                    moveLeft = false;
+                    break;
+                case 'KeyD':
+                    moveRight = false;
+                    break;
+            }
+        }
+        
+        // Sell nutrinium for credits
+        function sellNutrinium() {
+            if (nutrinium > 0) {
+                const value = nutrinium * nutriValue;
+                credits += value;
+                nutrinium = 0;
+                updateUI();
+            }
+        }
+        
+        // Upgrade player speed
+        function upgradeSpeed() {
+            const cost = 100;
+            if (credits >= cost) {
+                credits -= cost;
+                speedLevel++;
+                playerSpeed = 20 + speedLevel * 5;
+                updateUI();
+            }
+        }
+        
+        // Upgrade player gun
+        function upgradeGun() {
+            const cost = 150;
+            if (credits >= cost) {
+                credits -= cost;
+                gunLevel++;
+                shootingDelay = Math.max(0.1, 0.5 - (gunLevel - 1) * 0.05);
+                updateUI();
+            }
+        }
+        
+        // Upgrade player health
+        function upgradeHealth() {
+            const cost = 200;
+            if (credits >= cost) {
+                credits -= cost;
+                health++;
+                updateUI();
+            }
+        }
+        
+        // Restart the game
+        function restartGame() {
+            // Remove all objects from the scene
+            while (scene.children.length > 0) {
+                scene.remove(scene.children[0]);
+            }
+            
+            // Reset arrays
+            projectiles = [];
+            enemies = [];
+            deposits = [];
+            enemyProjectiles = [];
+            starField = [];
+            
+            // Reset game variables
+            nutrinium = 0;
+            credits = 100;
+            nutriValue = 10;
+            health = 1;
+            speedLevel = 1;
+            gunLevel = 1;
+            playerSpeed = 20;
+            respawnCost = 50;
+            gameTime = 300;
+            shootingDelay = 0.5;
+            
+            // Hide game over screen
+            document.getElementById('gameOver').style.display = 'none';
+            
+            // Initialize game again
+            init();
+            updateUI();
+        }
+        
+        // Quit game and show game over screen
+        function quitGame() {
+            endGame();
+        }
+        
+        // Process player death
+        function playerDeath() {
+            if (credits >= respawnCost) {
+                credits -= respawnCost;
+                respawnCost = Math.floor(respawnCost * 1.5);
+                nutrinium = 0;
+                
+                // Reset player position
+                player.position.set(0, 0, 0);
+                playerDirection = new THREE.Vector3(0, 0, 1);
+                
+                updateUI();
+            } else {
+                endGame();
+            }
+        }
+        
+        // End the game
+        function endGame() {
+            isGameOver = true;
+            
+            // Show game over screen
+            document.getElementById('gameOver').style.display = 'block';
+            document.getElementById('finalCredits').textContent = credits;
+            
+            // Calculate time survived
+            const timeRemaining = gameTime;
+            const minutesSurvived = Math.floor((300 - timeRemaining) / 60);
+            const secondsSurvived = Math.floor((300 - timeRemaining) % 60);
+            document.getElementById('timeSurvived').textContent = 
+                `${minutesSurvived}:${secondsSurvived < 10 ? '0' : ''}${secondsSurvived}`;
+        }
+        
+        // Update UI elements
+        function updateUI() {
+            document.getElementById('nutrinium').textContent = nutrinium;
+            document.getElementById('credits').textContent = credits;
+            document.getElementById('value').textContent = nutriValue;
+            document.getElementById('health').textContent = health;
+            document.getElementById('speed').textContent = speedLevel;
+            document.getElementById('gun').textContent = gunLevel;
+            document.getElementById('respawn').textContent = respawnCost;
+            
+            // Update timer
+            const minutes = Math.floor(gameTime / 60);
+            const seconds = Math.floor(gameTime % 60);
+            document.getElementById('time').textContent = 
+                `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+        }
+        
+        // Main animation loop
+        function animate() {
+            if (isGameOver) return;
+            
+            requestAnimationFrame(animate);
+            
+            const delta = clock.getDelta();
+            
+            // Update game time
+            gameTime -= delta;
+            if (gameTime <= 0) {
+                endGame();
+                return;
+            }
+            
+            // Random chance to create new deposits
+            if (Math.random() < 0.01) {
+                createDeposit();
+            }
+            
+            // Rare chance to create large deposit
+            if (Math.random() < 0.002) {
+                createDeposit(true);
+            }
+            
+            // Random chance to create new enemies
+            if (Math.random() < 0.005 && enemies.length < 10) {
+                createEnemy();
+            }
+            
+            // Update nutrinium value (random walk)
+            if (Math.random() < 0.01) {
+                const change = Math.random() < 0.6 ? 1 : -1; // 60% chance to increase
+                nutriValue = Math.max(5, nutriValue + change);
+                updateUI();
+            }
+            
+            // Update player direction based on mouse position
+            raycaster.setFromCamera(mousePosition, camera);
+            const dir = raycaster.ray.direction;
+            playerDirection.set(dir.x, dir.y, dir.z).normalize();
+            
+            // Rotate player to face direction
+            const targetRotation = new THREE.Quaternion().setFromUnitVectors(
+                new THREE.Vector3(0, 0, 1),
+                new THREE.Vector3(playerDirection.x, 0, playerDirection.z).normalize()
+            );
+            player.quaternion.slerp(targetRotation, 0.1);
+            
+            // Move player forward
+            const forwardSpeed = playerSpeed * delta;
+            const moveDir = new THREE.Vector3(playerDirection.x, 0, playerDirection.z).normalize();
+            player.position.add(moveDir.multiplyScalar(forwardSpeed));
+            
+            // Handle WASD movement (perpendicular to forward direction)
+            const moveAmount = forwardSpeed * 0.7;
+            if (moveUp) player.position.y += moveAmount;
+            if (moveDown) player.position.y -= moveAmount;
+            
+            // Get perpendicular vector for left/right movement
+            const perpDir = new THREE.Vector3(playerDirection.z, 0, -playerDirection.x).normalize();
+            if (moveLeft) player.position.add(perpDir.multiplyScalar(-moveAmount));
+            if (moveRight) player.position.add(perpDir.multiplyScalar(moveAmount));
+            
+            // Update projectiles
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const proj = projectiles[i];
+                proj.mesh.position.add(proj.direction.clone().multiplyScalar(proj.speed * delta));
+                
+                // Remove projectiles that are too far away
+                const distance = proj.mesh.position.distanceTo(player.position);
+                if (distance > 100) {
+                    scene.remove(proj.mesh);
+                    projectiles.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for collision with enemies
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    const hitDistance = proj.mesh.position.distanceTo(enemy.mesh.position);
+                    
+                    if (hitDistance < 2) {
+                        // Remove enemy
+                        scene.remove(enemy.mesh);
+                        enemies.splice(j, 1);
+                        
+                        // Remove projectile
+                        scene.remove(proj.mesh);
+                        projectiles.splice(i, 1);
+                        
+                        // Add nutrinium from enemy
+                        nutrinium += enemy.value;
+                        updateUI();
+                        
+                        break;
+                    }
+                }
+            }
+            
+            // Update enemy projectiles
+            for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+                const proj = enemyProjectiles[i];
+                proj.mesh.position.add(proj.direction.clone().multiplyScalar(proj.speed * delta));
+                
+                // Remove projectiles that are too far away
+                const distance = proj.mesh.position.distanceTo(player.position);
+                if (distance > 100) {
+                    scene.remove(proj.mesh);
+                    enemyProjectiles.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for collision with player
+                const hitDistance = proj.mesh.position.distanceTo(player.position);
+                if (hitDistance < 2) {
+                    // Remove projectile
+                    scene.remove(proj.mesh);
+                    enemyProjectiles.splice(i, 1);
+                    
+                    // Decrease health
+                    health--;
+                    updateUI();
+                    
+                    // Check if player is dead
+                    if (health <= 0) {
+                        playerDeath();
+                    }
+                }
+            }
+            
+            // Update enemies
+            enemies.forEach(enemy => {
+                if (enemy.isGuardian) {
+                    // Guardians patrol around their deposit
+                    if (player.position.distanceTo(enemy.guardPosition) < enemy.guardRadius) {
+                        // Player is near, attack
+                        const direction = new THREE.Vector3()
+                            .subVectors(player.position, enemy.mesh.position)
+                            .normalize();
+                        
+                        // Move toward player
+                        enemy.mesh.position.add(direction.multiplyScalar(enemy.speed * delta));
+                        
+                        // Face player
+                        const targetRotation = new THREE.Quaternion().setFromUnitVectors(
+                            new THREE.Vector3(0, 0, 1),
+                            new THREE.Vector3(direction.x, 0, direction.z).normalize()
+                        );
+                        enemy.mesh.quaternion.slerp(targetRotation, 0.1);
+                        
+                        // Shoot at player
+                        const now = clock.getElapsedTime();
+                        if (now - enemy.lastShot >= enemy.shootingDelay) {
+                            shootProjectile(enemy.mesh.position, direction, true);
+                            enemy.lastShot = now;
+                        }
+                    } else {
+                        // Patrol around deposit
+                        const time = clock.getElapsedTime();
+                        const angle = time * 0.5;
+                        
+                        enemy.mesh.position.x = enemy.guardPosition.x + Math.cos(angle) * 10;
+                        enemy.mesh.position.z = enemy.guardPosition.z + Math.sin(angle) * 10;
+                    }
+                } else {
+                    // Regular enemies chase player
+                    const direction = new THREE.Vector3()
+                        .subVectors(player.position, enemy.mesh.position)
+                        .normalize();
+                    
+                    // Move toward player
+                    enemy.mesh.position.add(direction.multiplyScalar(enemy.speed * delta));
+                    
+                    // Face player
+                    const targetRotation = new THREE.Quaternion().setFromUnitVectors(
+                        new THREE.Vector3(0, 0, 1),
+                        new THREE.Vector3(direction.x, 0, direction.z).normalize()
+                    );
+                    enemy.mesh.quaternion.slerp(targetRotation, 0.1);
+                    
+                    // Shoot at player if close enough
+                    const distance = enemy.mesh.position.distanceTo(player.position);
+                    if (distance < 30) {
+                        const now = clock.getElapsedTime();
+                        if (now - enemy.lastShot >= enemy.shootingDelay) {
+                            shootProjectile(enemy.mesh.position, direction, true);
+                            enemy.lastShot = now;
+                        }
+                    }
+                }
+            });
+            
+            // Update deposits and check for collection
+            for (let i = deposits.length - 1; i >= 0; i--) {
+                const deposit = deposits[i];
+                const distance = deposit.mesh.position.distanceTo(player.position);
+                
+                if (distance < 3) {
+                    // Collect nutrinium
+                    nutrinium += deposit.value;
+                    
+                    // Remove deposit
+                    scene.remove(deposit.mesh);
+                    deposits.splice(i, 1);
+                    
+                    updateUI();
+                    
+                    // Create new deposit to replace collected one
+                    createDeposit(Math.random() < 0.1); // 10% chance for large deposit
+                }
+            }
+            
+            // Update star field for parallax effect
+            starField.forEach(star => {
+                const starPos = star.position.clone();
+                const playerPos = player.position.clone();
+                
+                // If star is too far behind, move it forward
+                if (starPos.distanceTo(playerPos) > 1000) {
+                    const direction = new THREE.Vector3()
+                        .subVectors(playerPos, starPos)
+                        .normalize();
+                    
+                    star.position.copy(playerPos.clone().add(
+                        direction.multiplyScalar(-1000 + Math.random() * 200)
+                    ));
+                }
+            });
+            
+            // Update UI
+            updateUI();
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
