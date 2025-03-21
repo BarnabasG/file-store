@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SirLootsalot</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        #hud {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial;
+            font-size: 14px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="hud"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script>
+        let scene, camera, renderer, player;
+        let keys = {}, mouse = { x: 0, y: 0, down: false };
+        let nutrinium = 0, credits = 100, health = 3, score = 0;
+        let speedLevel = 1, gunLevel = 1, healthLevel = 1;
+        let lastShot = 0, lastSpawn = 0, lastUpgrade = 0;
+        let baseSpeed = 0.2, boostMultiplier = 2, boostAvailable = true;
+        let creditValue = 50, gameStartTime, timeLimit = 300000;
+        let enemies = [], projectiles = [], nutriniumDeposits = [];
+        
+        init();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            const light = new THREE.PointLight(0xffffff, 1, 100);
+            light.position.set(0, 0, 50);
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0x404040));
+
+            // Player
+            const geometry = new THREE.ConeGeometry(1, 3, 8);
+            const material = new THREE.MeshPhongMaterial({ color: 0xaaaaaa });
+            player = new THREE.Mesh(geometry, material);
+            player.rotation.x = Math.PI/2;
+            scene.add(player);
+
+            camera.position.set(0, -10, 5);
+            camera.lookAt(player.position);
+
+            // Stars
+            const stars = new THREE.BufferGeometry();
+            const starVertices = [];
+            for(let i = 0; i < 10000; i++) {
+                starVertices.push(
+                    Math.random() * 2000 - 1000,
+                    Math.random() * 2000 - 1000,
+                    Math.random() * 2000 - 1000
+                );
+            }
+            stars.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+            const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.1 });
+            const starField = new THREE.Points(stars, starMaterial);
+            scene.add(starField);
+
+            gameStartTime = Date.now();
+            
+            document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+            document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+            document.addEventListener('mousemove', e => {
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            });
+            document.addEventListener('mousedown', () => mouse.down = true);
+            document.addEventListener('mouseup', () => mouse.down = false);
+            
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const time = Date.now();
+
+            // Player movement
+            player.rotation.z = -mouse.x * 2;
+            player.rotation.x = Math.PI/2 + mouse.y;
+            
+            const forward = new THREE.Vector3();
+            player.getWorldDirection(forward);
+            player.position.add(forward.multiplyScalar(baseSpeed * speedLevel * (keys.space && boostAvailable ? boostMultiplier : 1)));
+
+            if(keys.w) player.position.y += 0.1;
+            if(keys.s) player.position.y -= 0.1;
+            if(keys.a) player.position.x -= 0.1;
+            if(keys.d) player.position.x += 0.1;
+
+            // Shooting
+            if(mouse.down && time - lastShot > 1000/gunLevel) {
+                const projectile = createProjectile(0x00ff00, 0.5);
+                projectile.position.copy(player.position);
+                projectile.velocity = forward.clone().multiplyScalar(1.5);
+                projectiles.push(projectile);
+                lastShot = time;
+            }
+
+            // Spawning
+            if(time - lastSpawn > 5000) {
+                spawnNutrinium();
+                spawnEnemy();
+                lastSpawn = time;
+            }
+
+            // Update credit value
+            creditValue += (Math.random() - 0.45) * 2;
+            creditValue = Math.max(20, creditValue * 0.99 + 50 * 0.01);
+
+            // Check collisions
+            checkCollisions();
+
+            // Update HUD
+            updateHUD();
+
+            renderer.render(scene, camera);
+        }
+
+        function createProjectile(color, size) {
+            const geometry = new THREE.SphereGeometry(size);
+            const material = new THREE.MeshBasicMaterial({ color });
+            const mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+            return { mesh, velocity: new THREE.Vector3() };
+        }
+
+        function spawnNutrinium() {
+            const isLarge = Math.random() < 0.1;
+            const geometry = new THREE.SphereGeometry(isLarge ? 3 : 1);
+            const material = new THREE.MeshPhongMaterial({ color: 0x0000ff });
+            const deposit = new THREE.Mesh(geometry, material);
+            deposit.position.set(
+                Math.random() * 100 - 50,
+                Math.random() * 100 - 50,
+                Math.random() * 100 - 50
+            );
+            scene.add(deposit);
+            nutriniumDeposits.push(deposit);
+
+            if(isLarge) {
+                const guard = createEnemy(0x8b0000);
+                guard.position.copy(deposit.position);
+                guard.position.x += 5;
+                enemies.push(guard);
+            }
+        }
+
+        function createEnemy(color) {
+            const geometry = new THREE.SphereGeometry(1.5);
+            const material = new THREE.MeshPhongMaterial({ color });
+            const enemy = new THREE.Mesh(geometry, material);
+            scene.add(enemy);
+            return { mesh: enemy, lastShot: 0 };
+        }
+
+        function checkCollisions() {
+            // Nutrinium collection
+            nutriniumDeposits.forEach((deposit, index) => {
+                if(player.position.distanceTo(deposit.position) < deposit.geometry.parameters.radius + 1) {
+                    scene.remove(deposit);
+                    nutriniumDeposits.splice(index, 1);
+                    nutrinium += deposit.geometry.parameters.radius;
+                }
+            });
+
+            // Projectile hits
+            projectiles.forEach((proj, index) => {
+                proj.mesh.position.add(proj.velocity);
+                if(proj.mesh.position.distanceTo(player.position) < 1) {
+                    die();
+                }
+            });
+        }
+
+        function die() {
+            credits -= 50 * healthLevel;
+            nutrinium = 0;
+            health = 2 + healthLevel;
+            player.position.set(0,0,0);
+        }
+
+        function updateHUD() {
+            const timeLeft = Math.max(0, timeLimit - (Date.now() - gameStartTime));
+            document.getElementById('hud').innerHTML = `
+                Credits: ${credits.toFixed(1)}<br>
+                Nutrinium: ${nutrinium}<br>
+                Credit Value: ${creditValue.toFixed(1)}<br>
+                Speed Level: ${speedLevel}<br>
+                Gun Level: ${gunLevel}<br>
+                Health Level: ${healthLevel}<br>
+                Time Left: ${Math.floor(timeLeft/1000)}s
+            `;
+        }
+
+        // Handle upgrades and other actions
+        document.addEventListener('keyup', e => {
+            const key = e.key.toLowerCase();
+            if(key === 'z' && nutrinium > 0) {
+                credits += nutrinium * creditValue;
+                nutrinium = 0;
+            }
+            if(key === 'x' && credits >= speedLevel * 100) {
+                credits -= speedLevel * 100;
+                speedLevel++;
+            }
+            if(key === 'c' && credits >= gunLevel * 100) {
+                credits -= gunLevel * 100;
+                gunLevel++;
+            }
+            if(key === 'v' && credits >= healthLevel * 100) {
+                credits -= healthLevel * 100;
+                healthLevel++;
+                health++;
+            }
+            if(key === 'r') init();
+            if(key === 'q') window.close();
+        });
+    </script>
+</body>
+</html>
