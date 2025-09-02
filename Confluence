@@ -1,0 +1,102 @@
+// SECTION 1: HERO BANNER
+// Center the entire hero section
+{center}
+// Replace with the URL of your banner image after you upload it to the page
+!YOUR_BANNER_IMAGE_URL|width=1200px!
+
+h1. MLflow: Your End-to-End MLOps Platform
+h3. Accelerate your machine learning lifecycle with a fully integrated, secure, and multi-tenant MLflow experience. No onboarding required—start tracking experiments today.
+{center}
+
+// The "Buttons" are created using Panel macros with only a title.
+{panel:titleBGColor=#0C66E4|titleColor=#FFFFFF|title=[🚀 Launch MLflow|https://YOUR_MLFLOW_URL]}
+{panel}
+{panel:titleBGColor=#DFE1E6|titleColor=#091E42|title=[📖 Read the Docs|https://LINK_TO_YOUR_DOCS]}
+{panel}
+
+
+----
+
+
+// SECTION 2: KEY FEATURES
+{center}
+h2. Built for the Enterprise, Designed for You
+{center}
+
+|| Icon (Upload Image) || Icon (Upload Image) || Icon (Upload Image) ||
+| !https://i.imgur.com/g8c2j9x.png! | !https://i.imgur.com/YqG3g9T.png! | !https://i.imgur.com/1B2r9V4.png! |
+| h4. Seamless Access & Multi-Tenancy | h4. Enterprise-Grade Security | h4. The Power of Open Source |
+| Instantly access MLflow using your CDAO credentials. No forms, no tickets, no waiting. Your work is automatically isolated within your CDAO workspace, ensuring complete project privacy and multi-tenancy. | Our platform is built on IDA-based Role-Based Access Control (RBAC). This ensures that only authorised users can access specific experiments, models, and workspaces, meeting all internal security and compliance standards. | Get all the features you love from open-source MLflow—tracking, projects, models, and registry—supercharged with the security, support, and seamless integration of an internal, fully managed platform. |
+
+
+----
+
+
+// SECTION 3: GETTING STARTED
+{center}
+h2. Get Started in Minutes
+{center}
+
+|| Step 1: Configure Your Client || Step 2: Start Logging! ||
+| Point your MLflow client to our central tracking server. It's one line of code to get started. Just set the tracking URI and your experiment name. | Wrap your training code with `with mlflow.start_run():` and use `mlflow.log_param()` and `mlflow.log_metric()` to track your work. It's that simple. |
+| {code:language=python}
+import mlflow
+
+# 1. Set the central tracking URI
+mlflow.set_tracking_uri("https://your-internal-mlflow-server.com")
+
+# 2. Set your experiment.
+# This will be created within your CDAO workspace.
+mlflow.set_experiment("My First Awesome Project")
+{code} | {code:language=python}
+# Log a run under the current experiment
+with mlflow.start_run() as run:
+    print(f"Run ID: {run.info.run_id}")
+
+    # Log parameters
+    mlflow.log_param("learning_rate", 0.01)
+
+    # Log metrics
+    for i in range(5):
+        mlflow.log_metric("accuracy", 0.85 + i/100)
+    
+    print("Run logged successfully!")
+{code} |
+
+
+----
+
+
+// SECTION 4: MEET THE TEAM
+{center}
+h2. Meet the MLflow Platform Team
+We are here to help you succeed. Don't hesitate to reach out!
+{center}
+
+|| (Upload Circular Photo) || (Upload Circular Photo) || (Upload Circular Photo) || (Upload Circular Photo) || (Upload Circular Photo) ||
+| !https://i.imgur.com/uIz5i6S.png! | !https://i.imgur.com/uIz5i6S.png! | !https://i.imgur.com/uIz5i6S.png! | !https://i.imgur.com/uIz5i6S.png! | !https://i.imgur.com/uIz5i6S.png! |
+| *Jane Doe* | *John Smith* | *Alex Ray* | *Priya Singh* | *David Chen* |
+| _Product Manager_ | _Lead ML Engineer_ | _Senior Software Engineer_ | _ML Engineer_ | _DevOps Engineer_ |
+
+
+----
+
+
+// SECTION 5: HELP & RESOURCES
+{center}
+h2. Need Help?
+{center}
+
+|| Quick Links || Get Support ||
+| 📖 [*Full Documentation*|https://LINK_TO_YOUR_DOCS]: Dive deeper into advanced features and best practices. | 💬 [*Slack Channel*|https://LINK_TO_YOUR_SLACK]: Join the conversation in `#mlflow-users` for questions and community support. |
+| ❔ [*Frequently Asked Questions (FAQ)*|https://LINK_TO_YOUR_FAQ]: Find answers to common questions about setup, security, and usage. | 📅 [*Office Hours*|https://LINK_TO_OFFICE_HOURS]: We hold weekly drop-in sessions every Thursday at 2 PM. Join Here. |
+| 📊 [*Service Status Page*|https://LINK_TO_STATUS_PAGE]: Check here for scheduled maintenance and platform status updates. | 🎫 [*File a Ticket*|https://LINK_TO_SERVICE_DESK]: For bugs or specific requests, please file a ticket with our Service Desk. |
+
+
+----
+
+
+// SECTION 6: FOOTER
+{center}
+MLflow Platform | Maintained by the CDAO Platform Engineering Team
+{center}
